@@ -1,0 +1,31 @@
+---
+title: "rbnb"
+output: html_document
+date: "2025-10-22"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(lubridate)
+df=read.csv("train.csv")
+glimpse(df)
+
+df$last_review=ymd(df$last_review)
+
+df$reviews_per_month[is.na(df$reviews_per_month)]=0
+df$price=as.numeric(df$price)
+df=df %>% filter(price > 0)
+
+cols_to_remove=c("id", "host_id", "host_name")
+df=df %>% select(-any_of(cols_to_remove))
+sapply(df, function(x) sum(is.na(x)))
+sum(df$availability_365==0)
+glimpse(df)
+write.csv(df, "train_cleaned.csv", row.names = FALSE)
+
+```
+
