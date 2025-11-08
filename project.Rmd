@@ -129,76 +129,43 @@ ggplot(df, aes(x = neighbourhood_group, fill = neighbourhood_group)) +
 
 df <- read.csv("train_transformed.csv")
 
-############################################################
-# 1️⃣ Préparation des données pour le modèle
-############################################################
-
-# Retirer les lignes manquantes sur les variables utilisées
 df_model <- df %>%
   select(log_price, neighbourhood_group, room_type, number_of_reviews) %>%
   drop_na()
 
-# Division du dataset : 80% train / 20% test
 set.seed(123)
 train_index <- createDataPartition(df_model$log_price, p = 0.8, list = FALSE)
 train <- df_model[train_index, ]
 test  <- df_model[-train_index, ]
 
-############################################################
-# 2️⃣ Modèle 1 : Régression Linéaire
-############################################################
-
 model_lm <- lm(log_price ~ neighbourhood_group + room_type + number_of_reviews, data = train)
-
-# Résumé du modèle
 summary(model_lm)
-
-# Prédictions
 pred_lm_log <- predict(model_lm, newdata = test)
-
-# Revenir à l’échelle du prix original (expm1 = inverse de log1p)
 pred_lm_price <- expm1(pred_lm_log)
-
-# Calcul du RMSE
 rmse_lm <- sqrt(mean((test$log_price - pred_lm_log)^2))
 cat("RMSE (Linear Model):", round(rmse_lm, 3), "\n")
 
-############################################################
-# 3️⃣ Modèle 2 : Arbre de Régression (rpart)
-############################################################
 
 model_tree <- rpart(log_price ~ neighbourhood_group + room_type + number_of_reviews,
                     data = train,
                     method = "anova",
                     control = rpart.control(cp = 0.01))
 
-# Visualisation de l’arbre
 rpart.plot(model_tree, type = 3, fallen.leaves = TRUE,
            main = "Regression Tree for Airbnb Prices")
 
-# Prédictions
 pred_tree_log <- predict(model_tree, newdata = test)
 pred_tree_price <- expm1(pred_tree_log)
-
-# Calcul du RMSE
 rmse_tree <- sqrt(mean((test$log_price - pred_tree_log)^2))
 cat("RMSE (Decision Tree):", round(rmse_tree, 3), "\n")
-
-############################################################
-# 4️⃣ Comparaison et interprétation
-############################################################
 
 cat("\n--- MODEL COMPARISON ---\n")
 cat("Linear Regression RMSE:", round(rmse_lm, 3), "\n")
 cat("Decision Tree RMSE:", round(rmse_tree, 3), "\n")
-
-# Analyse des coefficients du modèle linéaire
 coef_df <- tidy(model_lm)
 print(coef_df)
 
 
-
-# Interprétation basique à ajouter dans le rapport :
 # - neighbourhood_group : Manhattan et Brooklyn augmentent significativement le prix
 # - room_type : les Entire home/apt sont les plus chers
 # - number_of_reviews : faible effet négatif (plus de reviews = prix légèrement plus bas)
