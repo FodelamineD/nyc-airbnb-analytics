@@ -11,6 +11,16 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 library(tidyverse)
 library(lubridate)
+library(ggplot2)
+library(leaflet)
+library(scales)
+library(caret)       # pour la division train/test et les métriques
+library(rpart)       # pour le modèle arbre
+library(rpart.plot) 
+library(broom)
+
+#step 1
+
 df=read.csv("train.csv")
 glimpse(df)
 
@@ -26,6 +36,172 @@ sapply(df, function(x) sum(is.na(x)))
 sum(df$availability_365==0)
 glimpse(df)
 write.csv(df, "train_cleaned.csv", row.names = FALSE)
+
+
+#step 2
+
+df <- read.csv("train_cleaned.csv")
+df$log_price <- log1p(df$price)
+most_recent_date <- max(ymd(df$last_review), na.rm = TRUE)
+df$days_since_last_review <- as.numeric(
+  difftime(most_recent_date, ymd(df$last_review), units = "days")
+)
+table(df$neighbourhood)
+table(df$neighbourhood_group)
+df$room_type <- as.factor(df$room_type)
+glimpse(df)
+write.csv(df, "train_transformed.csv", row.names = FALSE)
+
+
+#step 3
+
+
+df <- read.csv("train_transformed.csv")
+glimpse(df)
+leaflet(df) %>%
+  addTiles() %>%
+  addCircleMarkers(
+    ~longitude, ~latitude,
+    color = ~case_when(
+      neighbourhood_group == "Manhattan" ~ "red",
+      neighbourhood_group == "Brooklyn" ~ "blue",
+      neighbourhood_group == "Queens" ~ "green",
+      neighbourhood_group == "Bronx" ~ "purple",
+      neighbourhood_group == "Staten Island" ~ "orange",
+      TRUE ~ "gray"
+    ),
+    radius = 5,
+    stroke = FALSE,
+    fillOpacity = 0.5,
+    popup = ~paste0("<b>", name, "</b><br>",
+                    "Price: $", price, "<br>",
+                    "Room type: ", room_type, "<br>",
+                    "Neighbourhood: ", neighbourhood)
+  )
+
+
+ggplot(df, aes(x = reorder(neighbourhood_group, log_price, median), 
+               y = log_price, fill = neighbourhood_group)) +
+  geom_boxplot() +   
+  scale_fill_brewer(palette = "Set3") +
+  labs(title = "Price distribution (log) by Borough",
+       x = "Borough", y = "log(Price)") +
+  theme_minimal() 
+
+
+
+ggplot(df, aes(x = room_type, fill = room_type)) +
+  geom_bar() +
+  scale_fill_brewer(palette = "Set2") +
+  labs(title = "Number of Listings by Room Type",
+       x = "Room Type", y = "Number of Listings") +
+  theme_minimal()
+
+
+ggplot(df, aes(x = availability_365, y = number_of_reviews)) +
+  geom_point(alpha = 0.05, color = "darkblue") +
+  geom_smooth(method = "lm", color = "red", se = FALSE) +
+  labs(title = "Availability vs Reviews",
+       x = "Availability (days per year)",
+       y = "Number of Reviews") +
+  theme_light()
+
+
+df %>%
+  group_by(neighbourhood_group, room_type) %>%
+  summarise(mean_price = mean(price, na.rm = TRUE)) %>%
+  ggplot(aes(x = neighbourhood_group, y = mean_price, fill = room_type)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Average Price by Room Type and Borough",
+       x = "Borough", y = "Average Price ($)") +
+  theme_minimal()
+
+ggplot(df, aes(x = neighbourhood_group, fill = neighbourhood_group)) +
+  geom_bar() +
+  scale_fill_brewer(palette = "Set1") +
+  labs(title = "Number of Listings by Borough",
+       x = "Borough", y = "Count") +
+  theme_minimal()
+
+
+#step 4
+
+
+df <- read.csv("train_transformed.csv")
+
+############################################################
+# 1️⃣ Préparation des données pour le modèle
+############################################################
+
+# Retirer les lignes manquantes sur les variables utilisées
+df_model <- df %>%
+  select(log_price, neighbourhood_group, room_type, number_of_reviews) %>%
+  drop_na()
+
+# Division du dataset : 80% train / 20% test
+set.seed(123)
+train_index <- createDataPartition(df_model$log_price, p = 0.8, list = FALSE)
+train <- df_model[train_index, ]
+test  <- df_model[-train_index, ]
+
+############################################################
+# 2️⃣ Modèle 1 : Régression Linéaire
+############################################################
+
+model_lm <- lm(log_price ~ neighbourhood_group + room_type + number_of_reviews, data = train)
+
+# Résumé du modèle
+summary(model_lm)
+
+# Prédictions
+pred_lm_log <- predict(model_lm, newdata = test)
+
+# Revenir à l’échelle du prix original (expm1 = inverse de log1p)
+pred_lm_price <- expm1(pred_lm_log)
+
+# Calcul du RMSE
+rmse_lm <- sqrt(mean((test$log_price - pred_lm_log)^2))
+cat("RMSE (Linear Model):", round(rmse_lm, 3), "\n")
+
+############################################################
+# 3️⃣ Modèle 2 : Arbre de Régression (rpart)
+############################################################
+
+model_tree <- rpart(log_price ~ neighbourhood_group + room_type + number_of_reviews,
+                    data = train,
+                    method = "anova",
+                    control = rpart.control(cp = 0.01))
+
+# Visualisation de l’arbre
+rpart.plot(model_tree, type = 3, fallen.leaves = TRUE,
+           main = "Regression Tree for Airbnb Prices")
+
+# Prédictions
+pred_tree_log <- predict(model_tree, newdata = test)
+pred_tree_price <- expm1(pred_tree_log)
+
+# Calcul du RMSE
+rmse_tree <- sqrt(mean((test$log_price - pred_tree_log)^2))
+cat("RMSE (Decision Tree):", round(rmse_tree, 3), "\n")
+
+############################################################
+# 4️⃣ Comparaison et interprétation
+############################################################
+
+cat("\n--- MODEL COMPARISON ---\n")
+cat("Linear Regression RMSE:", round(rmse_lm, 3), "\n")
+cat("Decision Tree RMSE:", round(rmse_tree, 3), "\n")
+
+# Analyse des coefficients du modèle linéaire
+coef_df <- tidy(model_lm)
+print(coef_df)
+
+
+
+# Interprétation basique à ajouter dans le rapport :
+# - neighbourhood_group : Manhattan et Brooklyn augmentent significativement le prix
+# - room_type : les Entire home/apt sont les plus chers
+# - number_of_reviews : faible effet négatif (plus de reviews = prix légèrement plus bas)
 
 ```
 
