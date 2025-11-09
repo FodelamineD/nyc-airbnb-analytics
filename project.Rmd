@@ -14,167 +14,187 @@ library(lubridate)
 library(ggplot2)
 library(leaflet)
 library(scales)
-library(caret)       
-library(rpart)       
-library(rpart.plot) 
+library(caret)
+library(rpart)
+library(rpart.plot)
 library(broom)
 library(htmltools)
 library(htmlwidgets)
 
-#step 1
 
-df=read.csv("train.csv")
+# STEP 1: Data Cleaning
+
+df = read.csv("train.csv")
 glimpse(df)
 
-df$last_review=ymd(df$last_review)
+# Convert review dates
 
-df$reviews_per_month[is.na(df$reviews_per_month)]=0
-df$price=as.numeric(df$price)
-df=df %>% filter(price > 0)
+df$last_review = ymd(df$last_review)
 
-cols_to_remove=c("id", "host_id", "host_name")
-df=df %>% select(-any_of(cols_to_remove))
-df <- df %>% filter(price < quantile(price, 0.99))
+# Replace missing reviews_per_month with 0
+
+df$reviews_per_month[is.na(df$reviews_per_month)] = 0
+
+# Convert price to numeric and remove invalid prices
+
+df$price = as.numeric(df$price)
+df = df %>% filter(price > 0)
+
+# Remove irrelevant columns
+
+cols_to_remove = c("id", "host_id", "host_name")
+df = df %>% select(-any_of(cols_to_remove))
+
+# Remove the top 1% of most expensive listings to limit the price errors during the predictions
+
+df = df %>% filter(price < quantile(price, 0.99))
+
+# NA and zero availability check
+
 sapply(df, function(x) sum(is.na(x)))
-sum(df$availability_365==0)
-glimpse(df)
+sum(df$availability_365 == 0)
+
+# Save cleaned dataset
+
 write.csv(df, "train_cleaned.csv", row.names = FALSE)
 
 
-#step 2
+# STEP 2: Feature Engineering
 
-df <- read.csv("train_cleaned.csv")
-df$log_price <- log1p(df$price)
-most_recent_date <- max(ymd(df$last_review), na.rm = TRUE)
-df$days_since_last_review <- as.numeric(
-  difftime(most_recent_date, ymd(df$last_review), units = "days")
-)
-table(df$neighbourhood)
-table(df$neighbourhood_group)
-df$room_type <- as.factor(df$room_type)
-glimpse(df)
+df = read.csv("train_cleaned.csv")
+
+# Create log-transformed price
+
+df$log_price = log1p(df$price)
+
+# Compute days since the last review
+
+most_recent_date = max(ymd(df$last_review), na.rm = TRUE)
+df$days_since_last_review = as.numeric(difftime(most_recent_date, ymd(df$last_review), units = "days"))
+
+# Convert categorical columns
+
+df$room_type = as.factor(df$room_type)
+
+# Save transformed dataset
+
 write.csv(df, "train_transformed.csv", row.names = FALSE)
 
 
-#step 3
+# STEP 3: Data Visualization
 
-
-df <- read.csv("train_transformed.csv")
+df = read.csv("train_transformed.csv")
 glimpse(df)
-leaflet(df) %>%
-  addTiles() %>%
-  addCircleMarkers(
-    ~longitude, ~latitude,
-    color = ~case_when(
+
+# Interactive map of listings by borough
+
+leaflet(df) %>% 
+  addTiles() %>% 
+    addCircleMarkers(~longitude, ~latitude, color = ~case_when(
       neighbourhood_group == "Manhattan" ~ "red",
       neighbourhood_group == "Brooklyn" ~ "blue",
       neighbourhood_group == "Queens" ~ "green",
       neighbourhood_group == "Bronx" ~ "purple",
       neighbourhood_group == "Staten Island" ~ "orange",
-      TRUE ~ "gray"
-    ),
-    radius = 5,
-    stroke = FALSE,
-    fillOpacity = 0.5,
-    popup = ~paste0("<b>", name, "</b><br>",
-                    "Price: $", price, "<br>",
-                    "Room type: ", room_type, "<br>",
-                    "Neighbourhood: ", neighbourhood)
-  )
+      TRUE ~ "gray"),
+      radius = 5,
+      stroke = FALSE,
+      fillOpacity = 0.5,
+      popup = ~paste0("<b>", name, "</b><br>",
+      "Price: $", price, "<br>",
+      "Room type: ", room_type, "<br>",
+      "Neighbourhood: ", neighbourhood)
+      )
 
+# Price distribution across boroughs (log scale)
 
-ggplot(df, aes(x = reorder(neighbourhood_group, log_price, median), 
-               y = log_price, fill = neighbourhood_group)) +
-  geom_boxplot() +   
-  scale_fill_brewer(palette = "Set3") +
-  labs(title = "Price distribution (log) by Borough",
-       x = "Borough", y = "log(Price)") +
-  theme_minimal() 
+ggplot(df, aes(x = reorder(neighbourhood_group, log_price, median), y = log_price, fill = neighbourhood_group)) +
+geom_boxplot() + scale_fill_brewer(palette = "Set3") + labs(title = "Price distribution (log) by Borough",
+x = "Borough", y = "log(Price)") +
+theme_minimal()
 
+# Number of listings per room type
 
+ggplot(df, aes(x = room_type, fill = room_type)) + geom_bar() + scale_fill_brewer(palette = "Set2") +
+labs(title = "Number of Listings by Room Type", x = "Room Type", y = "Number of Listings") +
+theme_minimal()
 
-ggplot(df, aes(x = room_type, fill = room_type)) +
-  geom_bar() +
-  scale_fill_brewer(palette = "Set2") +
-  labs(title = "Number of Listings by Room Type",
-       x = "Room Type", y = "Number of Listings") +
-  theme_minimal()
+# Relationship between availability and reviews
 
+ggplot(df, aes(x = availability_365, y = number_of_reviews)) + 
+geom_point(alpha = 0.05, color = "darkblue") +
+geom_smooth(method = "lm", color = "red", se = FALSE) +
+labs(title = "Availability vs Reviews", x = "Availability (days per year)", y = "Number of Reviews") +
+theme_light()
 
-ggplot(df, aes(x = availability_365, y = number_of_reviews)) +
-  geom_point(alpha = 0.05, color = "darkblue") +
-  geom_smooth(method = "lm", color = "red", se = FALSE) +
-  labs(title = "Availability vs Reviews",
-       x = "Availability (days per year)",
-       y = "Number of Reviews") +
-  theme_light()
+# Average price by borough and room type
 
-
-df %>%
-  group_by(neighbourhood_group, room_type) %>%
+df %>% group_by(neighbourhood_group, room_type) %>%
   summarise(mean_price = mean(price, na.rm = TRUE)) %>%
-  ggplot(aes(x = neighbourhood_group, y = mean_price, fill = room_type)) +
-  geom_bar(stat = "identity", position = "dodge") +
-  labs(title = "Average Price by Room Type and Borough",
-       x = "Borough", y = "Average Price ($)") +
-  theme_minimal()
+    ggplot(aes(x = neighbourhood_group, y = mean_price, fill = room_type)) +
+    geom_bar(stat = "identity", position = "dodge") +
+    labs(title = "Average Price by Room Type and Borough", x = "Borough", y = "Average Price ($)") +
+    theme_minimal()
+
+# Number of listings by borough
 
 ggplot(df, aes(x = neighbourhood_group, fill = neighbourhood_group)) +
-  geom_bar() +
-  scale_fill_brewer(palette = "Set1") +
-  labs(title = "Number of Listings by Borough",
-       x = "Borough", y = "Count") +
-  theme_minimal()
+geom_bar() + scale_fill_brewer(palette = "Set1") + labs(title = "Number of Listings by Borough", x = "Borough", y = "Count") +
+theme_minimal()
 
+# Spatial heatmap of log prices across the city
 
 ggplot(df, aes(longitude, latitude, color = log_price)) +
-  geom_point(alpha = 0.3, size = 1) +
-  scale_color_viridis_c(option = "plasma") +
-  labs(title = "Heatmap of Log Prices across New York City",
-       x = "Longitude", y = "Latitude", color = "log(Price)") +
-  theme_minimal()
+geom_point(alpha = 0.3, size = 1) + scale_color_viridis_c(option = "plasma") +
+labs(title = "Heatmap of Log Prices across New York City", x = "Longitude", y = "Latitude", color = "log(Price)") +
+theme_minimal()
 
+# Price distribution histograms per borough
 
 ggplot(df, aes(x = log_price, fill = neighbourhood_group)) +
-  geom_histogram(bins = 40, alpha = 0.7) +
-  facet_wrap(~neighbourhood_group, scales = "free_y") +
-  labs(title = "Price Distribution by Borough (log scale)",
-       x = "log(Price)", y = "Count") +
-  theme_minimal()
+geom_histogram(bins = 40, alpha = 0.7) +
+facet_wrap(~neighbourhood_group, scales = "free_y") +
+labs(title = "Price Distribution by Borough (log scale)", x = "log(Price)", y = "Count") +
+theme_minimal()
 
 
-#step 4
+# STEP 4: Predictive Modeling
 
 
-df <- read.csv("train_transformed.csv")
+df = read.csv("train_transformed.csv")
 
+# Selects the relevant features for the training of the 2 models 
 
-df_model <- df %>%
-  select(log_price, neighbourhood_group, room_type, number_of_reviews,
-         availability_365, minimum_nights, days_since_last_review,
-         reviews_per_month, calculated_host_listings_count) %>%
-  drop_na()
+df_model = df %>%
+  select(log_price, neighbourhood_group, room_type, number_of_reviews, availability_365, minimum_nights, days_since_last_review,
+  reviews_per_month, calculated_host_listings_count) %>%
+    drop_na()
 
+# Train/test split
 
 set.seed(123)
-train_index <- createDataPartition(df_model$log_price, p = 0.8, list = FALSE)
-train <- df_model[train_index, ]
-test  <- df_model[-train_index, ]
+train_index = createDataPartition(df_model$log_price, p = 0.8, list = FALSE)
+train = df_model[train_index, ]
+test  = df_model[-train_index, ]
 
-model_lm <- lm(
-  log_price ~ neighbourhood_group + room_type + number_of_reviews,
-  data = train
-)
+# Linear Regression Model
 
+model_lm = lm(
+log_price ~ neighbourhood_group + room_type + number_of_reviews,data = train)
 summary(model_lm)
-pred_lm_log <- predict(model_lm, newdata = test)
-pred_lm_price <- expm1(pred_lm_log)
-actual_price <- expm1(test$log_price)
 
-rmse_lm <- sqrt(mean((test$log_price - pred_lm_log)^2))
+# Predictions
+
+pred_lm_log = predict(model_lm, newdata = test)
+pred_lm_price = expm1(pred_lm_log)
+actual_price = expm1(test$log_price)
+
+# Model evaluation
+
+rmse_lm = sqrt(mean((test$log_price - pred_lm_log)^2))
 rmse_lm_dollars <- sqrt(mean((actual_price - pred_lm_price)^2))
-mae_lm <- mean(abs(actual_price - pred_lm_price))
-rsq_lm <- summary(model_lm)$adj.r.squared
+mae_lm = mean(abs(actual_price - pred_lm_price))
+rsq_lm = summary(model_lm)$adj.r.squared
 
 cat("\n--- LINEAR REGRESSION RESULTS ---\n")
 cat("RMSE (log scale):", round(rmse_lm, 3), "\n")
@@ -182,128 +202,134 @@ cat("RMSE (dollars):", round(rmse_lm_dollars, 2), "$\n")
 cat("MAE (dollars):", round(mae_lm, 2), "$\n")
 cat("Adjusted R²:", round(rsq_lm, 3), "\n\n")
 
+# Coefficient interpretation
 
-coef_df <- tidy(model_lm) %>%
-  filter(term != "(Intercept)") %>%  
-  mutate(term = fct_reorder(term, estimate))
+coef_df = tidy(model_lm) %>%
+filter(term != "(Intercept)") %>%
+mutate(term = fct_reorder(term, estimate))
 
 ggplot(coef_df, aes(x = estimate, y = term, fill = term)) +
-  geom_col(show.legend = FALSE) +
-  geom_vline(xintercept = 0, linetype = "dashed") +
-  labs(title = "Estimated Effects on Log(Price)",
-       x = "Effect (log-scale)", y = "Predictors") +
-  theme_minimal()
+geom_col(show.legend = FALSE) +
+geom_vline(xintercept = 0, linetype = "dashed") +
+labs(title = "Estimated Effects on Log(Price)", x = "Effect (log-scale)", y = "Predictors") +
+theme_minimal()
 
+# Decision Tree Model
 
-model_tree <- rpart(
-  log_price ~ neighbourhood_group + room_type + number_of_reviews + 
-              availability_365 + minimum_nights + days_since_last_review,
-  data = train,
-  method = "anova",
-  control = rpart.control(cp = 0.001, maxdepth = 6)
-)
-rpart.plot(model_tree, type = 3, fallen.leaves = TRUE, main = "Larger Decision Tree")
+model_tree = rpart(
+log_price ~ neighbourhood_group + room_type + number_of_reviews +
+availability_365 + minimum_nights + days_since_last_review, data = train, method = "anova", control = rpart.control(cp = 0.001, maxdepth = 6))
+rpart.plot(model_tree, type = 3, fallen.leaves = TRUE, main = "Decision Tree Model")
 
+# Predictions
 
-pred_tree_log <- predict(model_tree, newdata = test)
-pred_tree_price <- expm1(pred_tree_log)
-rmse_tree <- sqrt(mean((test$log_price - pred_tree_log)^2))
-rmse_tree_dollars <- sqrt(mean((actual_price - pred_tree_price)^2))
-mae_tree <- mean(abs(actual_price - pred_tree_price))
-cat("RMSE (Decision Tree):", round(rmse_tree, 3), "\n")
+pred_tree_log = predict(model_tree, newdata = test)
+pred_tree_price = expm1(pred_tree_log)
+
+# Model evaluation
+
+rmse_tree = sqrt(mean((test$log_price - pred_tree_log)^2))
+rmse_tree_dollars = sqrt(mean((actual_price - pred_tree_price)^2))
+mae_tree = mean(abs(actual_price - pred_tree_price))
 
 cat("\n--- DECISION TREE RESULTS ---\n")
 cat("RMSE (log scale):", round(rmse_tree, 3), "\n")
 cat("RMSE (dollars):", round(rmse_tree_dollars, 2), "$\n")
 cat("MAE (dollars):", round(mae_tree, 2), "$\n\n")
 
-results <- tibble(
-  Model = c("Linear Regression", "Decision Tree"),
-  RMSE_log = c(rmse_lm, rmse_tree),
-  RMSE_dollars = c(rmse_lm_dollars, rmse_tree_dollars),
-  MAE_dollars = c(mae_lm, mae_tree)
+# Model comparison summary
+
+results = tibble(Model = c("Linear Regression", "Decision Tree"),
+RMSE_log = c(rmse_lm, rmse_tree),
+RMSE_dollars = c(rmse_lm_dollars, rmse_tree_dollars),
+MAE_dollars = c(mae_lm, mae_tree)
 )
 
 print(results, n = 2)
 
+# Identify best-performing model
+
 best_model <- if(rmse_lm < rmse_tree) "Linear Regression" else "Decision Tree"
 cat("\nBest Model:", best_model, "\n\n")
-results %>%
-  pivot_longer(-Model, names_to = "Metric", values_to = "Value") %>%
+
+# Comparison chart
+
+results %>% pivot_longer(-Model, names_to = "Metric", values_to = "Value") %>%
   ggplot(aes(x = Model, y = Value, fill = Model)) +
   geom_col(show.legend = FALSE) +
   geom_text(aes(label = round(Value, 2)), vjust = -0.5, size = 3) +
   facet_wrap(~Metric, scales = "free_y") +
-  labs(title = "Model Performance Comparison",
-       y = "Score") +
+  labs(title = "Model Performance Comparison", y = "Score") +
   theme_minimal() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
-# - neighbourhood_group : Manhattan et Brooklyn augmentent significativement le prix
-# - room_type : les Entire home/apt sont les plus chers
-# - number_of_reviews : faible effet négatif (plus de reviews = prix légèrement plus bas)
-train <- read.csv("train_transformed.csv")
-
-train$days_since_last_review[is.na(train$days_since_last_review)] <- 
-  median(train$days_since_last_review, na.rm = TRUE)
 
 
-train$predicted_log_price_lm <- predict(model_lm, newdata = train)
-train$predicted_price_lm <- expm1(train$predicted_log_price_lm)
 
+# FINAL STEP : Interactive Maps of Predictions
 
-train$predicted_log_price_tree <- predict(model_tree, newdata = train)
-train$predicted_price_tree <- expm1(train$predicted_log_price_tree)
+train = read.csv("train_transformed.csv")
 
+# Handle missing values
 
-pal_lm <- colorNumeric(palette = "YlGnBu", domain = train$predicted_price_lm)
-pal_tree <- colorNumeric(palette = "YlOrRd", domain = train$predicted_price_tree)
+train$days_since_last_review[is.na(train$days_since_last_review)] = median(train$days_since_last_review, na.rm = TRUE)
 
-#Linear Regression map
-map_lm <- leaflet(train) %>%
+# Predictions from both models
+
+train$predicted_log_price_lm = predict(model_lm, newdata = train)
+train$predicted_price_lm = expm1(train$predicted_log_price_lm)
+train$predicted_log_price_tree = predict(model_tree, newdata = train)
+train$predicted_price_tree = expm1(train$predicted_log_price_tree)
+
+# Color scales
+
+pal_lm = colorNumeric(palette = "YlGnBu", domain = train$predicted_price_lm)
+pal_tree = colorNumeric(palette = "YlOrRd", domain = train$predicted_price_tree)
+
+# Linear Regression Map
+
+map_lm = leaflet(train) %>%
   addProviderTiles("CartoDB.Positron") %>%
-  addCircleMarkers(
-    lng = ~longitude, lat = ~latitude,
-    radius = 3, color = ~pal_lm(predicted_price_lm),
-    stroke = FALSE, fillOpacity = 0.7,
-    popup = ~paste0(
-      "<b>", name, "</b><br>",
-      "Neighbourhood: ", neighbourhood_group, "<br>",
-      "Room type: ", room_type, "<br>",
-      "Actual price: $", price, "<br>",
-      "Predicted (LM): $", round(predicted_price_lm, 2), "<br>",
-      "Error: $", round(abs(price - predicted_price_lm), 2))
-  ) %>%
+  addCircleMarkers( lng = ~longitude, lat = ~latitude, radius = 3, color = ~pal_lm(predicted_price_lm),
+                    stroke = FALSE, fillOpacity = 0.7,
+                    popup = ~paste0(
+                      "<b>", name, "</b><br>",
+                      "Neighbourhood: ", neighbourhood_group, "<br>",
+                      "Room type: ", room_type, "<br>",
+                      "Actual price: $", price, "<br>",
+                      "Predicted (LM): $", round(predicted_price_lm, 2), "<br>",
+                      "Error: $", round(abs(price - predicted_price_lm), 2))
+                    ) %>%
   addLegend("bottomright", pal = pal_lm, values = ~predicted_price_lm,
             title = "Predicted price (Linear Model $)")
 
-#Decision Tree map
-map_tree <- leaflet(train) %>%
+# Decision Tree Map
+
+map_tree = leaflet(train) %>%
   addProviderTiles("CartoDB.Positron") %>%
-  addCircleMarkers(
-    lng = ~longitude, lat = ~latitude,
-    radius = 3, color = ~pal_tree(predicted_price_tree),
-    stroke = FALSE, fillOpacity = 0.7,
-    popup = ~paste0(
-      "<b>", name, "</b><br>",
-      "Neighbourhood: ", neighbourhood_group, "<br>",
-      "Room type: ", room_type, "<br>",
-      "Actual price: $", price, "<br>",
-      "Predicted (Tree): $", round(predicted_price_tree, 2), "<br>",
-      "Error: $", round(abs(price - predicted_price_tree), 2))
-  ) %>%
+  addCircleMarkers(lng = ~longitude, lat = ~latitude,
+                   radius = 3, color = ~pal_tree(predicted_price_tree),
+                   stroke = FALSE, fillOpacity = 0.7,
+                   popup = ~paste0(
+                     "<b>", name, "</b><br>",
+                     "Neighbourhood: ", neighbourhood_group, "<br>",
+                     "Room type: ", room_type, "<br>",
+                     "Actual price: $", price, "<br>",
+                     "Predicted (Tree): $", round(predicted_price_tree, 2), "<br>",
+                     "Error: $", round(abs(price - predicted_price_tree), 2))
+                   ) %>%
   addLegend("bottomright", pal = pal_tree, values = ~predicted_price_tree,
             title = "Predicted price (Decision Tree $)")
 
-
+# Display both maps side by side
 
 htmltools::browsable(
-  tagList(
-    tags$h3("🏙️ Predicted Prices - Linear Regression"),
-    map_lm,
-    tags$hr(),
-    tags$h3("🌳 Predicted Prices - Decision Tree"),
-    map_tree
-  )
+tagList(
+tags$h3("Predicted Prices - Linear Regression"),
+map_lm,
+tags$hr(),
+tags$h3("Predicted Prices - Decision Tree"),
+map_tree
+)
 )
 ```
 
