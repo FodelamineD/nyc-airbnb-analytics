@@ -1,0 +1,277 @@
+/* === PALETTE ===
+   Noir graphite & Bleu cobalt
+   primary: #1C1C1E
+   accent:  #0070F3
+   background: #FAFAFA
+   text: #222222
+*/
+
+:root {
+  --primary: #1C1C1E;
+  --accent: #0070F3;
+  --background: #FAFAFA;
+  --text: #222222;
+}
+
+/* ===== HEADER FIXE EN HAUT ===== */
+header {
+  position: fixed;
+  top: 0;
+  width: 100%;
+  background-color: var(--primary);
+  color: white;
+  text-align: center;
+  padding: 10px 0;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+  z-index: 1000;
+}
+
+/* ===== BODY GLOBAL ===== */
+body {
+  padding-top: 60px; /* pour ne pas que le contenu passe sous le header */
+  font-family: "Open Sans", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  color: var(--text);
+  background-color: var(--background);
+  line-height: 1.6;
+  margin: 0;
+  opacity: 0;
+  animation: fadeIn 0.6s ease-in-out forwards;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ===== CONTENEUR CENTRAL ===== */
+.main-container {
+  max-width: 960px;
+  margin: 40px auto;
+  padding: 30px 40px;
+  background-color: #FFFFFF;
+  border-radius: 8px;
+  box-shadow: 0 3px 12px rgba(0,0,0,0.05);
+}
+
+/* ===== TITRES ===== */
+h1, h2, h3, h4 {
+  font-family: "Open Sans", sans-serif;
+  color: var(--primary);
+  font-weight: 600;
+  margin-top: 32px;
+  margin-bottom: 12px;
+}
+
+h1 {
+  font-size: 2.1rem;
+  text-align: center;
+  border-bottom: 3px solid #E5E7EB;
+  padding-bottom: 8px;
+}
+
+h2 {
+  font-size: 1.6rem;
+  border-bottom: 2px solid #E5E7EB;
+  padding-bottom: 6px;
+}
+
+h3 {
+  font-size: 1.3rem;
+}
+
+p {
+  margin-bottom: 12px;
+}
+
+/* ===== LIENS ===== */
+a {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* ===== TABLE DES MATIÈRES ===== */
+#TOC, .tocify, .tocify-wrapper {
+  background-color: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+  padding: 16px 20px;
+  font-size: 0.9rem;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+}
+
+#TOC a {
+  color: var(--accent);
+}
+
+#TOC a:hover {
+  text-decoration: underline;
+}
+
+/* ===== CODE ===== */
+pre code {
+  font-family: "Fira Code", monospace;
+  font-size: 0.9rem;
+  color: #2d3436;
+}
+
+code {
+  background-color: #f5f7fa;
+  border-radius: 3px;
+  padding: 2px 4px;
+}
+
+/* ===== TABLEAUX ===== */
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 16px 0;
+  font-size: 0.95rem;
+}
+
+table th, table td {
+  border: 1px solid #E5E7EB;
+  padding: 8px 10px;
+}
+
+table th {
+  background-color: #F3F4F6;
+  font-weight: 600;
+  text-align: left;
+}
+
+table tr:nth-child(even) {
+  background-color: #FAFAFA;
+}
+
+/* Pour les tableaux générés par kable()/pander, etc. */
+.table {
+  width: 100%;
+}
+
+/* ===== FIGURES / GRAPHIQUES ===== */
+img {
+  max-width: 100%;
+  height: auto;
+  border: 1px solid #E5E7EB;
+  border-radius: 6px;
+  background-color: #FFFFFF;
+  padding: 6px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+
+.figure, .figure img {
+  display: block;
+  margin: 16px auto;
+}
+
+.caption, .figure-caption {
+  text-align: center;
+  font-size: 0.9rem;
+  color: #777777;
+}
+
+/* ===== LEAFLET (CARTE) ===== */
+.leaflet-container {
+  margin-top: 20px;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.08);
+}
+
+/* ===== SÉPARATEURS ===== */
+hr {
+  margin: 32px 0;
+  border: 0;
+  border-top: 1px solid #E5E7EB;
+}
+
+/* ===== BLOCKQUOTES ===== */
+blockquote {
+  border-left: 4px solid var(--accent);
+  padding-left: 12px;
+  color: #555555;
+  margin-left: 0;
+  font-style: italic;
+  background-color: #f5f7fa;
+  border-radius: 4px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+/* ===== LISTES ===== */
+ul, ol {
+  margin-left: 20px;
+}
+
+/* ===== NOTES / HIGHLIGHTS ===== */
+.note {
+  border-left: 4px solid #f1c40f;
+  background-color: #fff9e6;
+  padding: 10px 12px;
+  margin: 16px 0;
+  border-radius: 4px;
+  font-size: 0.95rem;
+}
+
+/* ===== FOOTER ===== */
+footer {
+  text-align: center;
+  font-size: 0.85rem;
+  color: #666;
+  border-top: 1px solid #E5E7EB;
+  margin-top: 40px;
+  padding: 10px 0;
+}
+/* ===== CHUNKS R MARKDOWN (code + output) ===== */
+
+/* Conteneur de code source (chunks R) */
+pre, pre.sourceCode, pre.r {
+  background-color: #f5f7fa;
+  border-radius: 6px;
+  padding: 10px 12px;
+  border: 1px solid #E5E7EB;
+  overflow-x: auto;        /* scroll horizontal si une ligne est trop longue */
+  white-space: pre;        /* garde la mise en forme du code */
+  margin: 14px 0;
+}
+
+/* Code à l'intérieur du pré */
+pre code {
+  font-family: "Fira Code", monospace;
+  font-size: 0.9rem;
+  color: #111827;
+}
+
+/* Sorties texte (résultats R) */
+pre.output {
+  background-color: #ffffff;
+  border-radius: 6px;
+  padding: 8px 10px;
+  border: 1px solid #E5E7EB;
+  color: #374151;
+  font-size: 0.9rem;
+}
+
+/* Messages, warnings, errors */
+pre.warning {
+  background-color: #fff9e6;
+  border-left: 4px solid #f59e0b;
+}
+
+pre.error {
+  background-color: #fef2f2;
+  border-left: 4px solid #dc2626;
+}
+
+pre.message {
+  background-color: #ecfdf5;
+  border-left: 4px solid #10b981;
+}
+
