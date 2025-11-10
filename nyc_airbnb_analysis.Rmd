@@ -1,0 +1,394 @@
+---
+title: "NYC Airbnb Analysis — Project 5"
+author: "Mehdi Fouidi"
+date: "2025-10-22"
+output:
+  html_document:
+    css: style2.css
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    number_sections: true
+    theme: cosmo
+    df_print: paged
+---
+
+# Introduction
+
+This project analyzes the **New York City Airbnb market** using open data found in kaggle.  
+The main goals are to:
+- Clean and prepare the dataset for analysis.  
+- Explore price distributions and geographic patterns.  
+- Identify the most influential factors affecting rental prices.  
+- Build predictive models (Linear Regression and Decision Tree).  
+- Visualize predicted prices on an interactive map.  
+
+---
+
+# Step 1 — Data Cleaning and Preparation
+
+We start by cleaning the dataset, we do this by removing irrelevant columns, handling missing values, and filtering out extreme prices(only 0.01% of the values).
+This ensures the data used for modeling is accurate and reliable.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(lubridate)
+library(ggplot2)
+library(leaflet)
+library(scales)
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(broom)
+library(htmltools)
+library(htmlwidgets)
+
+df = read.csv("train.csv")
+
+df$last_review = ymd(df$last_review)
+df$reviews_per_month[is.na(df$reviews_per_month)] = 0
+df$price = as.numeric(df$price)
+df = df %>% filter(price > 0)
+
+cols_to_remove = c("id", "host_id", "host_name")
+df = df %>% select(-any_of(cols_to_remove))
+df = df %>% filter(price < quantile(price, 0.99))
+
+write.csv(df, "train_cleaned.csv", row.names = FALSE)
+clean=read.csv("train_cleaned.csv")
+cat("\nHere is a glimpse of the cleaned dataset :\n")
+
+glimpse(clean)
+```
+
+This cleaning step ensures the dataset is consistent and free of missing or extreme values that could bias our analysis.
+
+---
+
+# Step 2 — Feature Engineering
+
+We create new variables to make our analysis more insightful, such as a **log-transformed price** (for better scaling) and **days since last review** (to verify recent activity).
+
+```{r, echo=FALSE}
+df = read.csv("train_cleaned.csv")
+df$log_price = log1p(df$price)
+
+most_recent_date = max(ymd(df$last_review), na.rm = TRUE)
+df$days_since_last_review = as.numeric(difftime(most_recent_date, ymd(df$last_review), units = "days"))
+df$room_type = as.factor(df$room_type)
+write.csv(df, "train_transformed.csv", row.names = FALSE)
+transformed=read.csv("train_transformed.csv")
+cat("\nHere is our final transformed dataset that we will use for the rest of the analysis:\n")
+glimpse(transformed)
+```
+we can see some na values here but we will not use these rows in our modeling.
+By transforming key variables, we prepare the data for **visualization and modeling**, helping stabilize variance and improving interpretability.
+We also notice that the neighbourhood_group and room type are more interresting for visualisation and modeling.
+
+---
+
+# Step 3 — Visualization and Exploration
+
+We now explore key patterns in the NYC Airbnb market through data visualization.
+
+### Interactive Map of Listings by Borough
+
+Each circle represents a listing, color-coded by its borough.
+
+```{r, echo=FALSE}
+df = read.csv("train_transformed.csv")
+leaflet(df) %>% 
+  addTiles() %>% 
+  addCircleMarkers(~longitude, ~latitude, color = ~case_when(
+    neighbourhood_group == "Manhattan" ~ "red",
+    neighbourhood_group == "Brooklyn" ~ "blue",
+    neighbourhood_group == "Queens" ~ "green",
+    neighbourhood_group == "Bronx" ~ "purple",
+    neighbourhood_group == "Staten Island" ~ "orange",
+    TRUE ~ "gray"),
+    radius = 4, stroke = FALSE, fillOpacity = 0.6,
+    popup = ~paste0("<b>", name, "</b><br>",
+                    "Price: $", price, "<br>",
+                    "Room type: ", room_type, "<br>",
+                    "Neighbourhood: ", neighbourhood))
+```
+
+### Price Distribution Across Boroughs
+
+The boxplot below compares price levels across boroughs on a **logarithmic scale**.
+
+```{r, echo=FALSE}
+ggplot(df, aes(x = reorder(neighbourhood_group, log_price, median), y = log_price, fill = neighbourhood_group)) +
+  geom_boxplot() +
+  scale_fill_brewer(palette = "Set3") +
+  labs(title = "Price Distribution (log) by Borough", x = "Borough", y = "log(Price)") +
+  theme_minimal()
+```
+
+We clearly notice that Manhattan is the most expensive judging by its median price, Brooklyn also shows higher median prices than the rest of the boroughs, confirming their premium market status.
+
+### Listings by Room Type
+
+```{r, echo=FALSE}
+ggplot(df, aes(x = room_type, fill = room_type)) +
+  geom_bar() +
+  scale_fill_brewer(palette = "Set2") +
+  labs(title = "Number of Listings by Room Type", x = "Room Type", y = "Count") +
+  theme_minimal()
+```
+
+we notice that entire homes are the most expensive and the most common type of offers on rbnb closely followed by private rooms.
+on the other hand private rooms  dominate availability, wich may be a sign that their are less demanded then entire homes/appartments.
+
+### Relationship between availability and reviews
+
+```{r, echo=FALSE}
+ggplot(df, aes(x = availability_365, y = number_of_reviews)) + 
+geom_point(alpha = 0.05, color = "darkblue") +
+labs(title = "Availability vs Reviews", x = "Availability (days per year)", y = "Number of Reviews") +
+theme_light()
+
+
+```
+we cannot see a clear relationship between availability and number of reviews, however we can notice that listings with very low availability also tend to have fewer reviews, which makes sense as they are less likely to be booked frequently.
+
+### Average price by borough and room type
+
+```{r, echo=FALSE}
+
+
+df %>% group_by(neighbourhood_group, room_type) %>%
+  summarise(mean_price = mean(price, na.rm = TRUE)) %>%
+    ggplot(aes(x = neighbourhood_group, y = mean_price, fill = room_type)) +
+    geom_bar(stat = "identity", position = "dodge") +
+    labs(title = "Average Price by Room Type and Borough", x = "Borough", y = "Average Price ($)") +
+    theme_minimal()
+
+
+```
+We can see that Manhattan has the highest average prices across all room types, with entire homes/apartments being the most expensive. Brooklyn follows as the second most expensive borough.
+on every borough entire homes/apartments are the priciest option, while shared rooms are the most affordable.
+
+### Number of listings by borough
+
+```{r, echo=FALSE}
+
+ggplot(df, aes(x = neighbourhood_group, fill = neighbourhood_group)) +
+geom_bar() + scale_fill_brewer(palette = "Set1") + labs(title = "Number of Listings by Borough", x = "Borough", y = "Count") +
+theme_minimal()
+
+
+```
+We can see that Manhattan and Brooklyn have the highest number of listings, indicating their popularity among Airbnb hosts and guests. Queens, Bronx, and Staten Island have significantly fewer listings in comparison.
+these may be a sign to invest in these boroughs as they are less saturate or to invest in manhattan and brooklyn as they have the highest demand.
+
+### Spatial heatmap of log prices across the city
+
+```{r, echo=FALSE}
+
+# Spatial heatmap of log prices across the city
+
+ggplot(df, aes(longitude, latitude, color = log_price)) +
+geom_point(alpha = 0.3, size = 1) + scale_color_viridis_c(option = "plasma") +
+labs(title = "Heatmap of Log Prices across New York City", x = "Longitude", y = "Latitude", color = "log(Price)") +
+theme_minimal()
+
+
+```
+This heatmap reveals that the highest prices are concentrated in Manhattan, particularly in areas like Midtown and Downtown. Brooklyn also shows pockets of higher prices, while Queens, Bronx, and Staten Island generally have lower prices.
+
+### Price distribution histograms per borough
+
+```{r, echo=FALSE}
+
+ggplot(df, aes(x = log_price, fill = neighbourhood_group)) +
+geom_histogram(bins = 40, alpha = 0.7) +
+facet_wrap(~neighbourhood_group, scales = "free_y") +
+labs(title = "Price Distribution by Borough (log scale)", x = "log(Price)", y = "Count") +
+theme_minimal()
+```
+These histograms show that Manhattan has a wider spread of prices, with a significant number of high-priced listings. Brooklyn also has a diverse price range, while the other boroughs tend to have lower and more concentrated price distributions.
+
+---
+
+# Step 4 — Modeling and Prediction
+
+We build two models to predict Airbnb prices:
+- **Linear Regression** (simple and interpretable).  
+- **Decision Tree** (captures non-linear patterns).
+
+### Linear Regression Model
+
+```{r, echo=FALSE}
+df = read.csv("train_transformed.csv")
+df_model = df %>% select(log_price, neighbourhood_group, room_type, number_of_reviews, minimum_nights, calculated_host_listings_count) %>% drop_na()
+
+set.seed(123)
+train_index = createDataPartition(df_model$log_price, p = 0.8, list = FALSE)
+train = df_model[train_index, ]
+test  = df_model[-train_index, ]
+
+model_lm = lm(log_price ~ neighbourhood_group + room_type + number_of_reviews, data = train)
+summary(model_lm)
+
+pred_lm_log = predict(model_lm, newdata = test)
+pred_lm_price = expm1(pred_lm_log)
+actual_price = expm1(test$log_price)
+
+rmse_lm = sqrt(mean((test$log_price - pred_lm_log)^2))
+rmse_lm_dollars <- sqrt(mean((actual_price - pred_lm_price)^2))
+mae_lm = mean(abs(actual_price - pred_lm_price))
+rsq_lm = summary(model_lm)$adj.r.squared
+
+cat("\n--- LINEAR REGRESSION RESULTS ---\n")
+cat("RMSE (log scale):", round(rmse_lm, 3), "\n")
+cat("RMSE (dollars):", round(rmse_lm_dollars, 2), "$\n")
+cat("MAE (dollars):", round(mae_lm, 2), "$\n")
+cat("Adjusted R²:", round(rsq_lm, 3), "\n\n")
+
+```
+
+### Linear Model Insights
+
+```{r, echo=FALSE}
+coef_df = tidy(model_lm) %>% filter(term != "(Intercept)") %>% mutate(term = fct_reorder(term, estimate))
+ggplot(coef_df, aes(x = estimate, y = term, fill = term)) +
+  geom_col(show.legend = FALSE) +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  labs(title = "Estimated Effects on Log(Price)", x = "Effect (log-scale)", y = "Predictors") +
+  theme_minimal()
+```
+
+Room type and borough strongly influence prices, with “Entire home/apt” listings commanding higher prices.
+the Bronx serve as a baseline for the neighbourhood_group variable, we can see that manhattan and brooklyn have the highest positive effects on log(price). 
+the number_of_reviews has a small negative effect, indicating that more reviews slightly decrease the price but it seems negligeable.
+
+### Decision Tree Model
+
+```{r, echo=FALSE}
+model_tree = rpart(log_price ~ neighbourhood_group + room_type + minimum_nights + calculated_host_listings_count + number_of_reviews,
+                   data = train, method = "anova", control = rpart.control(cp = 0.003, maxdepth = 4))
+rpart.plot(model_tree, type = 3, fallen.leaves = TRUE, main = "Decision Tree Model")
+
+pred_tree_log = predict(model_tree, newdata = test)
+pred_tree_price = expm1(pred_tree_log)
+
+
+rmse_tree = sqrt(mean((test$log_price - pred_tree_log)^2))
+rmse_tree_dollars = sqrt(mean((actual_price - pred_tree_price)^2))
+mae_tree = mean(abs(actual_price - pred_tree_price))
+
+cat("\n--- DECISION TREE RESULTS ---\n")
+cat("RMSE (log scale):", round(rmse_tree, 3), "\n")
+cat("RMSE (dollars):", round(rmse_tree_dollars, 2), "$\n")
+cat("MAE (dollars):", round(mae_tree, 2), "$\n\n")
+model_tree$variable.importance
+```
+
+The tree confirms that borough and room type are the primary decision factors in predicting price.
+we can see by the importance of the vatriables that neighbourhood_group and room_type are the most important predictors, followed by minimum_nights and calculated_host_listings_count. we also tryed to use more variables but they didnt improve the model performance judging by their importance scores and they made the tree less interpretable.
+
+### Model Comparison
+
+Finally, we are now comparing the two models based on RMSE and MAE on dollar scale.
+
+```{r, echo=FALSE}
+
+results = tibble(Model = c("Linear Regression", "Decision Tree"),
+RMSE_log = c(rmse_lm, rmse_tree),
+RMSE_dollars = c(rmse_lm_dollars, rmse_tree_dollars),
+MAE_dollars = c(mae_lm, mae_tree)
+)
+
+print(results, n = 2)
+
+best_model <- if(rmse_lm < rmse_tree) "Linear Regression" else "Decision Tree"
+cat("\nBest Model:", best_model, "\n\n")
+
+results %>% pivot_longer(-Model, names_to = "Metric", values_to = "Value") %>%
+  ggplot(aes(x = Model, y = Value, fill = Model)) +
+  geom_col(show.legend = FALSE) +
+  geom_text(aes(label = round(Value, 2)), vjust = -0.5, size = 3) +
+  facet_wrap(~Metric, scales = "free_y") +
+  labs(title = "Model Performance Comparison", y = "Score") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+the two models are really close but the decision tree slightly outperforms the linear regression in terms of RMSE and MAE on dollar scale, indicating it captures non-linear patterns better.
+our models have an acceptable level of accuracy for predicting Airbnb prices in NYC for the amount of information that we have, more professional models would require more data to improve their performance.
+
+---
+
+# Step 5 — Interactive Map of Predictions
+
+We visualize predicted prices from both models on an interactive map.
+
+```{r, echo=FALSE}
+train = read.csv("train_transformed.csv")
+
+train$predicted_log_price_lm = predict(model_lm, newdata = train)
+train$predicted_price_lm = expm1(train$predicted_log_price_lm)
+train$predicted_log_price_tree = predict(model_tree, newdata = train)
+train$predicted_price_tree = expm1(train$predicted_log_price_tree)
+
+pal_lm = colorNumeric(palette = "YlGnBu", domain = train$predicted_price_lm)
+pal_tree = colorNumeric(palette = "YlOrRd", domain = train$predicted_price_tree)
+
+# Linear Regression Map
+
+map_lm = leaflet(train) %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  addCircleMarkers( lng = ~longitude, lat = ~latitude, radius = 3, color = ~pal_lm(predicted_price_lm),
+                    stroke = FALSE, fillOpacity = 0.7,
+                    popup = ~paste0(
+                      "<b>", name, "</b><br>",
+                      "Neighbourhood: ", neighbourhood_group, "<br>",
+                      "Room type: ", room_type, "<br>",
+                      "Actual price: $", price, "<br>",
+                      "Predicted (LM): $", round(predicted_price_lm, 2), "<br>",
+                      "Error: $", round(abs(price - predicted_price_lm), 2))
+                    ) %>%
+  addLegend("bottomright", pal = pal_lm, values = ~predicted_price_lm,
+            title = "Predicted price (Linear Model $)")
+
+# Decision Tree Map
+
+map_tree = leaflet(train) %>%
+  addProviderTiles("CartoDB.Positron") %>%
+  addCircleMarkers(lng = ~longitude, lat = ~latitude,
+                   radius = 3, color = ~pal_tree(predicted_price_tree),
+                   stroke = FALSE, fillOpacity = 0.7,
+                   popup = ~paste0(
+                     "<b>", name, "</b><br>",
+                     "Neighbourhood: ", neighbourhood_group, "<br>",
+                     "Room type: ", room_type, "<br>",
+                     "Actual price: $", price, "<br>",
+                     "Predicted (Tree): $", round(predicted_price_tree, 2), "<br>",
+                     "Error: $", round(abs(price - predicted_price_tree), 2))
+                   ) %>%
+  addLegend("bottomright", pal = pal_tree, values = ~predicted_price_tree,
+            title = "Predicted price (Decision Tree $)")
+
+# Display both maps side by side
+
+htmltools::browsable(
+tagList(
+tags$h3("Predicted Prices - Linear Regression"),
+map_lm,
+tags$hr(),
+tags$h3("Predicted Prices - Decision Tree"),
+map_tree
+))
+```
+
+---
+
+# Conclusion
+This analysis of the NYC Airbnb market provided several insights:
+- **Manhattan** and **Brooklyn** dominate the market in both quantity and price.  
+- **Room type** is the most significant determinant of price.  
+- **Decision Tree** performed slightly better and provided more flexibility for non-linear patterns.  
+- Interactive visualizations allow stakeholders to explore neighborhood-level dynamics easily.
+we also have to say that our models could be improved with more features and data, but they provide a solid starting point for understanding price dynamics in the NYC Airbnb market. the errors are bigger for the high end listings, which may require specialized modeling approaches.
+
+This project demonstrates how **data cleaning, visualization, and modeling** can be combined to gain insights into the NYC rental market.

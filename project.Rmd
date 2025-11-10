@@ -1,8 +1,18 @@
 ---
-title: "rbnb"
-output: html_document
+title: "rbnb — NYC Airbnb Analysis"
+author: "Your Name"
+output:
+  html_document:
+    css: style.css
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    number_sections: true
+    theme: cosmo
+    df_print: paged
 date: "2025-10-22"
 ---
+
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -26,12 +36,12 @@ library(htmlwidgets)
 
 df = read.csv("train.csv")
 glimpse(df)
-
 # Convert review dates
 
 df$last_review = ymd(df$last_review)
 
 # Replace missing reviews_per_month with 0
+
 
 df$reviews_per_month[is.na(df$reviews_per_month)] = 0
 
@@ -62,7 +72,7 @@ write.csv(df, "train_cleaned.csv", row.names = FALSE)
 # STEP 2: Feature Engineering
 
 df = read.csv("train_cleaned.csv")
-
+glimpse(df)
 # Create log-transformed price
 
 df$log_price = log1p(df$price)
@@ -123,7 +133,6 @@ theme_minimal()
 
 ggplot(df, aes(x = availability_365, y = number_of_reviews)) + 
 geom_point(alpha = 0.05, color = "darkblue") +
-geom_smooth(method = "lm", color = "red", se = FALSE) +
 labs(title = "Availability vs Reviews", x = "Availability (days per year)", y = "Number of Reviews") +
 theme_light()
 
@@ -166,8 +175,7 @@ df = read.csv("train_transformed.csv")
 # Selects the relevant features for the training of the 2 models 
 
 df_model = df %>%
-  select(log_price, neighbourhood_group, room_type, number_of_reviews, availability_365, minimum_nights, days_since_last_review,
-  reviews_per_month, calculated_host_listings_count) %>%
+  select(log_price, neighbourhood_group, room_type, number_of_reviews, minimum_nights, calculated_host_listings_count) %>%
     drop_na()
 
 # Train/test split
@@ -217,8 +225,7 @@ theme_minimal()
 # Decision Tree Model
 
 model_tree = rpart(
-log_price ~ neighbourhood_group + room_type + number_of_reviews +
-availability_365 + minimum_nights + days_since_last_review, data = train, method = "anova", control = rpart.control(cp = 0.001, maxdepth = 6))
+log_price ~ neighbourhood_group + room_type + minimum_nights + calculated_host_listings_count + number_of_reviews, data = train, method = "anova", control = rpart.control(cp = 0.003, maxdepth = 4))
 rpart.plot(model_tree, type = 3, fallen.leaves = TRUE, main = "Decision Tree Model")
 
 # Predictions
@@ -236,7 +243,7 @@ cat("\n--- DECISION TREE RESULTS ---\n")
 cat("RMSE (log scale):", round(rmse_tree, 3), "\n")
 cat("RMSE (dollars):", round(rmse_tree_dollars, 2), "$\n")
 cat("MAE (dollars):", round(mae_tree, 2), "$\n\n")
-
+model_tree$variable.importance
 # Model comparison summary
 
 results = tibble(Model = c("Linear Regression", "Decision Tree"),
