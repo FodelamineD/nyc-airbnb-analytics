@@ -275,3 +275,26 @@ pre.message {
   border-left: 4px solid #10b981;
 }
 
+/* ---- Center main content properly ---- */
+body {
+  max-width: 1200px;          /* limite la largeur du texte */
+  margin: 0 auto;            /* centre le contenu horizontalement */
+  padding: 40px 30px;        /* ajoute de l'espace autour */
+}
+
+/* Center figures, tables and widgets */
+table, img, .html-widget {
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Optional: center headings in section headers */
+h1, h2 {
+  text-align: center;
+}
+
+/* Optional: slightly increase line spacing for readability */
+p {
+  line-height: 1.6;
+}

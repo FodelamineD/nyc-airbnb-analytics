@@ -1,10 +1,10 @@
 ---
-title: "NYC Airbnb Analysis — Project 5"
-author: "Mehdi Fouidi, Massyl Meddour , Diakhaby Fode , Micipsa Djaroun "
-date: "2025-10-22"
+title: "PROJECT 5: NYC Airbnb -
+Analyzing the Rental Market"
+author: "Mehdi Fouidi, Massyl Meddour , Diakhaby Fode , Micipssa Djaroun "
 output:
   html_document:
-    css: style2.css
+    css: style_final.css
     toc: true
     toc_float: true
     toc_depth: 3
@@ -19,7 +19,8 @@ editor_options:
 # Introduction
 
 This project analyzes the **New York City Airbnb market** using open data found in kaggle.\
-The main goals are to: - Clean and prepare the dataset for analysis.\
+The main goals are to:\
+- Clean and prepare the dataset for analysis.\
 - Explore price distributions and geographic patterns.\
 - Identify the most influential factors affecting rental prices.\
 - Build predictive models (Linear Regression and Decision Tree).\
@@ -27,10 +28,11 @@ The main goals are to: - Clean and prepare the dataset for analysis.\
 
 ------------------------------------------------------------------------
 
-# Step 1 — Data Cleaning and Preparation
+# Data Cleaning and Preparation
 
-We start by cleaning the dataset, we do this by removing irrelevant columns, handling missing values, and filtering out extreme prices (only 0.01% of the values).
+We start by cleaning the dataset, we do this by removing irrelevant columns, handling missing values, and filtering out extreme prices (only 0.01% of the top values).
 This ensures the data used for modeling is accurate and reliable.
+Here is a head of the cleaned dataset :
 
 ```{r, echo=FALSE, message=FALSE, warning=FALSE}
 library(tidyverse)
@@ -44,6 +46,8 @@ library(rpart.plot)
 library(broom)
 library(htmltools)
 library(htmlwidgets)
+library(knitr)
+library(kableExtra)
 
 df = read.csv("train.csv")
 
@@ -58,9 +62,12 @@ df = df %>% filter(price < quantile(price, 0.99))
 
 write.csv(df, "train_cleaned.csv", row.names = FALSE)
 clean=read.csv("train_cleaned.csv")
-cat("\nHere is a head of the cleaned dataset :\n")
-cat("\n")
-head(clean)
+
+clean %>%
+  head(10) %>%
+  kable(format = "html",
+        align = "c") %>%
+  kable_styling(full_width = FALSE, bootstrap_options = c("hover", "condensed", "responsive"))
 
 ```
 
@@ -68,7 +75,7 @@ This cleaning step ensures the dataset is consistent and free of missing or extr
 
 ------------------------------------------------------------------------
 
-# Step 2 — Feature Engineering
+# Feature Engineering
 
 We create new variables to make our analysis more insightful, such as a **log-transformed price** (for better scaling) and **days since last review** (to verify recent activity).
 
@@ -84,7 +91,11 @@ df$room_type = as.factor(df$room_type)
 write.csv(df, "train_transformed.csv", row.names = FALSE)
 transformed=read.csv("train_transformed.csv")
 
-head(transformed)
+transformed %>%
+  head(10) %>%
+  kable(format = "html",
+        align = "c") %>%
+  kable_styling(full_width = FALSE, bootstrap_options = c("hover", "condensed", "responsive"))
 ```
 
 we can see some na values here but we will not use these rows in our modeling.
@@ -93,7 +104,7 @@ We also notice that the neighbourhood_group and room type are more interresting 
 
 ------------------------------------------------------------------------
 
-# Step 3 — Visualization and Exploration
+# Visualization and Exploration
 
 We now explore key patterns in the NYC Airbnb market through data visualization.
 
@@ -143,8 +154,22 @@ ggplot(df, aes(x = room_type, fill = room_type)) +
   theme_minimal()
 ```
 
-we notice that entire homes are the most expensive and the most common type of offers on rbnb closely followed by private rooms.
-on the other hand private rooms dominate availability, wich may be a sign that their are less demanded then entire homes/appartments.
+we notice that entire homes are the most common type of offers on airbnb closely followed by private rooms.
+a few shared rooms are available but they are by far the least common type of offers.
+
+### Availability Distribution by Room Type
+```{r, echo=FALSE}
+ggplot(df, aes(x = room_type, y = availability_365, fill = room_type)) +
+  geom_boxplot(alpha = 0.8, outlier.shape = 21, outlier.alpha = 0.3) +
+  scale_fill_brewer(palette = "Set2") +
+  labs(
+    title = "Availability Distribution by Room Type",
+    x = "Room Type",
+    y = "Availability (days per year)"  ) +
+  theme_minimal()
+```
+
+We can see that shared rooms tend to have higher availability compared to entire homes and private rooms.This could be because shared rooms are less demanded and remain available for longer periods.
 
 ### Relationship between availability and reviews
 
@@ -191,7 +216,7 @@ theme_minimal()
 
 We can see that Manhattan and Brooklyn have the highest number of listings, indicating their popularity among Airbnb hosts and guests.
 Queens, Bronx, and Staten Island have significantly fewer listings in comparison.
-these may be a sign to invest in these boroughs as they are less saturate or to invest in manhattan and brooklyn as they have the highest demand.
+this may be a sign to invest in these boroughs as they are less saturated or to invest in manhattan and brooklyn as they have the highest demand.
 
 ### Spatial heatmap of log prices across the city
 
@@ -226,7 +251,7 @@ Brooklyn also has a diverse price range, while the other boroughs tend to have l
 
 ------------------------------------------------------------------------
 
-# Step 4 — Modeling and Prediction
+# Modeling and Prediction
 
 We build two models to predict Airbnb prices: - **Linear Regression** (simple and interpretable).\
 - **Decision Tree** (captures non-linear patterns).
@@ -251,8 +276,6 @@ actual_price = expm1(test$log_price)
 rmse_lm = sqrt(mean((test$log_price - pred_lm_log)^2))
 rmse_lm_dollars <- sqrt(mean((actual_price - pred_lm_price)^2))
 mae_lm = mean(abs(actual_price - pred_lm_price))
-rsq_lm = summary(model_lm)$adj.r.squared
-
 
 
 ```
@@ -260,16 +283,12 @@ rsq_lm = summary(model_lm)$adj.r.squared
 RMSE (log scale): 0.461
 Indicates a moderate fit on the log scale.
 
-RMSE (dollars): $87.89
-On average, predictions are off by $87.89.
+RMSE (dollars): 87.89 $
+On average, predictions are off by 87.89 $ 
+(if we keep the top 0.01% of offers the RMSE in dollars would be around $250)
 
-MAE (dollars): $50.21
+MAE (dollars): 50.21 $
 Average error in predictions is $50.21.
-
-Adjusted R²: 0.491
-The model explains 49.1% of the variance in the data.
-
-### Linear Model Insights
 
 ```{r, echo=FALSE}
 coef_df = tidy(model_lm) %>% filter(term != "(Intercept)") %>% mutate(term = fct_reorder(term, estimate))
@@ -280,9 +299,9 @@ ggplot(coef_df, aes(x = estimate, y = term, fill = term)) +
   theme_minimal()
 ```
 
-Room type and borough strongly influence prices, with “Entire home/apt” listings commanding higher prices.
+Room type and borough strongly influence prices, with Entire home/apt listings commanding higher prices.
 the Bronx serve as a baseline for the neighbourhood_group variable, we can see that manhattan and brooklyn have the highest positive effects on log(price).
-the number_of_reviews has a small negative effect, indicating that more reviews slightly decrease the price but it seems negligeable.
+the number_of_reviews has a small negative effect, indicating that more reviews slightly decrease the price but it seems negligible.
 
 ### Decision Tree Model
 
@@ -302,38 +321,37 @@ mae_tree = mean(abs(actual_price - pred_tree_price))
 #model_tree$variable.importance
 ```
 
-**Decision Tree Results**
 
-**RMSE (log scale):** 0.458\
+RMSE (log scale): 0.458\
 Slightly better fit than the linear regression model (0.461), indicating good predictive accuracy on the log scale.
 
-**RMSE (dollars):** \$87.59\
-Predictions are off by approximately \$87.59 on average, similar to the linear model.
+RMSE (dollars): \$87.59\
+Similar to the linear model.
+(if we keep the top 0.01% of offers the RMSE in dollars would be around $250)
 
-**MAE (dollars):** \$49.93\
-The average error is \$49.93, also quite close to the linear regression’s MAE of \$50.21.
+MAE (dollars): \$49.93\
+The average error is  also quite close to the linear regression’s MAE of $50.21.
 
 **Feature Importances:**
 
-**room_type (6781.2469):**\
+room_type (6781.2469):\
 This feature is the most influential in predicting the target variable.
 It suggests that the type of room (e.g., entire home, private room) plays a major role in determining the price or outcome.
 
-**neighbourhood_group (1889.8427):**\
+neighbourhood_group (1889.8427):\
 The neighborhood group significantly impacts the target, implying location is a key factor in pricing or predictions.
 
-**minimum_nights (1407.2358):**\
+minimum_nights (1407.2358):\
 The number of minimum nights required for booking is an important predictor, affecting the price or other outcomes.
 
-**calculated_host_listings_count (1215.9348):**\
+calculated_host_listings_count (1215.9348):\
 The number of listings a host has impacts the outcome, likely indicating that more listings may correlate with certain pricing or availability patterns.
 
-**number_of_reviews (103.9417):**\
+number_of_reviews (103.9417):\
 While important, this variable is the least influential in comparison to others, though it may still reflect user trust or demand.
 
-The tree confirms that borough and room type are the primary decision factors in predicting price.
-we can see by the importance of the vatriables that neighbourhood_group and room_type are the most important predictors, followed by minimum_nights and calculated_host_listings_count.
-we also tryed to use more variables but they didnt improve the model performance judging by their importance scores and they made the tree less interpretable.
+This importance ranking is reflected in the tree structure, it confirms that borough and room type are the primary decision factors in predicting price, followed by minimum_nights and calculated_host_listings_count.
+we also tried to use more variables but they didn't improve the model performance judging by their importance scores and they made the tree less comprehensible.
 
 ### Model Comparison
 
@@ -363,11 +381,11 @@ results %>% pivot_longer(-Model, names_to = "Metric", values_to = "Value") %>%
 ```
 
 the two models are really close but the decision tree slightly outperforms the linear regression in terms of RMSE and MAE on dollar scale, indicating it captures non-linear patterns better.
-our models have an acceptable level of accuracy for predicting Airbnb prices in NYC for the amount of information that we have, more professional models would require more data to improve their performance.
+We made it slightly betteer by removing the top 0.01% of prices to avoid extreme prices that could skew the results. more professional models would require more data to improve their performance.
 
 ------------------------------------------------------------------------
 
-# Step 5 — Interactive Map of Predictions
+# Interactive Map of Predictions
 
 We visualize predicted prices from both models on an interactive map.
 
@@ -433,11 +451,11 @@ map_tree
 
 # Conclusion
 
-This analysis of the NYC Airbnb market provided several insights: - **Manhattan** and **Brooklyn** dominate the market in both quantity and price.\
-- **Room type** is the most significant determinant of price.\
-- **Decision Tree** performed slightly better and provided more flexibility for non-linear patterns.\
-- Interactive visualizations allow stakeholders to explore neighborhood-level dynamics easily.
-we also have to say that our models could be improved with more features and data, but they provide a solid starting point for understanding price dynamics in the NYC Airbnb market.
-the errors are bigger for the high end listings, which may require specialized modeling approaches.
+The analysis highlights that Manhattan and Brooklyn are the most profitable areas, driven by high demand and premium pricing especially for entire homes/apartments.
+These boroughs offer the best short-term rental returns, despite stronger competition.
 
-This project demonstrates how **data cleaning, visualization, and modeling** can be combined to gain insights into the NYC rental market.
+Queens presents a good mid-tier opportunity, with moderate prices, ideal for investors seeking lower entry costs.
+Bronx and Staten Island remain less attractive for short-term rentals due to limited demand.
+
+Overall, location and room type are the main price drivers.
+Investing in entire homes/apartments within Brooklyn or Manhattan provides the highest profitability potential, while Queens offers a balanced risk-return option.
